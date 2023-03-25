@@ -8,8 +8,7 @@ import {
   query,
   orderBy,
   getDocs,
-  onSnapshot,
-  fromMillis
+  onSnapshot
 } from 'firebase/firestore';
 import scrollIntoView from 'scroll-into-view-if-needed';
 import config from './db_config.js';
@@ -22,16 +21,11 @@ const db = getFirestore(app);
  * @param {object} message
  */
 async function sendMessage(message) {
-  // add a new "createdAt" field to the message object with the current timestamp
-  const createdAt = Timestamp.now();
-  const messageWithTimestamp = { ...message, createdAt };
-
-  // Add a new document with the updated message object
-  const docRef = await addDoc(collection(db, 'messages'), messageWithTimestamp);
+  // Add a new document with a generated id.
+  const docRef = await addDoc(collection(db, 'messages'), message);
   document.querySelector('#message').value = '';
   console.log('Document written with ID: ', docRef.id);
 }
-
 
 /**
  * Creates the message object from the input fields
@@ -55,7 +49,7 @@ function displayMessage(message) {
             <div>
               <span class="username">
                 ${message.username}
-                <time>${new Date(message.date.toDate()).toLocaleString('hu-HU')}</time>
+                <time>just now</time>
               </span>
               <br />
               <span class="message-text">${message.message}</span>
@@ -74,7 +68,6 @@ function displayMessage(message) {
     block: 'end'
   });
 }
-
 
 async function displayAllMessages() {
   // query the database for all messages
