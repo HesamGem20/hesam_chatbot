@@ -9,7 +9,9 @@ import {
   orderBy,
   getDocs,
   onSnapshot,
-  fromMillis
+  fromMillis,
+  doc,
+  deleteDoc
 } from 'firebase/firestore';
 import scrollIntoView from 'scroll-into-view-if-needed';
 import config from './db_config.js';
@@ -17,55 +19,40 @@ import config from './db_config.js';
 const app = initializeApp(config);
 const db = getFirestore(app);
 
-/**
- * sends a message to the database
- * @param {object} message
- */
 async function sendMessage(message) {
-  // add a new "createdAt" field to the message object with the current timestamp
   const createdAt = Timestamp.now();
   const messageWithTimestamp = { ...message, createdAt };
-
-  // Add a new document with the updated message object
   const docRef = await addDoc(collection(db, 'messages'), messageWithTimestamp);
   document.querySelector('#message').value = '';
   console.log('Document written with ID: ', docRef.id);
 }
 
-
-/**
- * Creates the message object from the input fields
- * @returns {object} the message object
- */
 function createMessage() {
   const message = document.querySelector('#message').value;
   const username = document.querySelector('#nickname').value;
   const date = Timestamp.now();
-
-  // const messageObj = { message: message, username: username, date: date}
-  // const messageObj = { message, username, date };
-  // return messageObj;
   return { message, username, date };
 }
 
-function displayMessage(message) {
+function displayMessage(doc) {
+  const message = doc.data();
+  const id = doc.id;
   const messageHTML = /*html*/ `
-          <div class="message">
-            <i class="fas fa-user"></i>
-            <div>
-              <span class="username">
-                ${message.username}
-                <time>${new Date(message.date.toDate()).toLocaleString('hu-HU')}</time>
-              </span>
-              <br />
-              <span class="message-text">${message.message}</span>
-            </div>
-            <div class="message-edit-buttons">
-              <i class="fas fa-trash-alt"></i>
-              <i class="fas fa-pen"></i>
-            </div>
-          </div>
-        </div>
+    <div class="message" data-id="${id}">
+      <i class="fas fa-user"></i>
+      <div>
+        <span class="username">
+          ${message.username}
+          <time>${new Date(message.date.toDate()).toLocaleString('hu-HU')}</time>
+        </span>
+        <br />
+        <span class="message-text">${message.message}</span>
+      </div>
+      <div class="message-edit-buttons">
+        <i class="fas fa-trash-alt"></i>
+        <i class="fas fa-pen"></i>
+      </div>
+    </div>
   `;
   const messages = document.querySelector('#messages');
   messages.insertAdjacentHTML('beforeend', messageHTML);
@@ -73,27 +60,26 @@ function displayMessage(message) {
     scrollMode: 'if-needed',
     block: 'end'
   });
-}
-
-
-async function displayAllMessages() {
-  // query the database for all messages
-  // loop over the messages and call displayMessage for each message
-  const q = query(collection(db, 'messages'), orderBy('date', 'asc'));
-  const querySnapshot = await getDocs(q);
-  querySnapshot.forEach((doc) => {
-    displayMessage(doc.data());
+  const deleteButton = messages.querySelector(`[data-id="${id}"] .fa-trash-alt`);
+  deleteButton.addEventListener('click', () => {
+    removeMessage(id);
+    deleteMessage(id);
   });
 }
 
-// to make sure that the HTML is loaded before we try to access it
+async function displayAllMessages() {
+  const q = query(collection(db, 'messages'), orderBy('date', 'asc'));
+  const querySnapshot = await getDocs(q);
+  querySnapshot.forEach((doc) => {
+    displayMessage(doc);
+  });
+}
+
 window.addEventListener('DOMContentLoaded', () => {
-  // displayAllMessages();
   document.querySelector('#send').addEventListener('click', () => {
     const message = createMessage();
     if (message.message && message.username) {
       sendMessage(message);
-      // displayMessage(message);
     }
   });
 });
@@ -103,7 +89,6 @@ document.addEventListener('keyup', (event) => {
     const message = createMessage();
     if (message.message && message.username) {
       sendMessage(message);
-      // displayMessage(message);
     }
   }
 });
@@ -111,7 +96,7 @@ document.addEventListener('keyup', (event) => {
 onSnapshot(collection(db, 'messages'), (snapshot) => {
   snapshot.docChanges().forEach((change) => {
     if (change.type === 'added') {
-      displayMessage(change.doc.data());
+      displayMessage(change.doc);
       console.log('added', change.doc.data());
     }
     if (change.type === 'modified') {
@@ -122,3 +107,13 @@ onSnapshot(collection(db, 'messages'), (snapshot) => {
     }
   });
 });
+
+async function removeMessage(id) {
+  const message = document.querySelector(`[data-id="${id}"]`);
+  message.remove();
+}
+
+async function deleteMessage(id) {
+  await deleteDoc(doc(db, 'messages', id));
+  console.log(`Document with ID ${id} deleted`);
+}
