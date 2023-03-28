@@ -9,9 +9,10 @@ import {
   orderBy,
   getDocs,
   onSnapshot,
-  fromMillis,
   doc,
-  deleteDoc
+  deleteDoc,
+  updateDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
 import scrollIntoView from 'scroll-into-view-if-needed';
 import config from './db_config.js';
@@ -30,20 +31,19 @@ async function sendMessage(message) {
 function createMessage() {
   const message = document.querySelector('#message').value;
   const username = document.querySelector('#nickname').value;
-  const date = Timestamp.now();
-  return { message, username, date };
+  return { message, username };
 }
 
 function displayMessage(doc) {
   const message = doc.data();
   const id = doc.id;
-  const messageHTML = /*html*/ `
+  const messageHTML = `
     <div class="message" data-id="${id}">
       <i class="fas fa-user"></i>
       <div>
         <span class="username">
           ${message.username}
-          <time>${new Date(message.date.toDate()).toLocaleString('hu-HU')}</time>
+          <time>${new Date(message.createdAt.toDate()).toLocaleString('hu-HU')}</time>
         </span>
         <br />
         <span class="message-text">${message.message}</span>
@@ -65,10 +65,14 @@ function displayMessage(doc) {
     removeMessage(id);
     deleteMessage(id);
   });
+  const editButton = messages.querySelector(`[data-id="${id}"] .fa-pen`);
+  editButton.addEventListener('click', () => {
+    displayEditMessage(id);
+  });
 }
 
 async function displayAllMessages() {
-  const q = query(collection(db, 'messages'), orderBy('date', 'asc'));
+  const q = query(collection(db, 'messages'), orderBy('createdAt', 'asc'));
   const querySnapshot = await getDocs(q);
   querySnapshot.forEach((doc) => {
     displayMessage(doc);
@@ -76,6 +80,7 @@ async function displayAllMessages() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  displayAllMessages();
   document.querySelector('#send').addEventListener('click', () => {
     const message = createMessage();
     if (message.message && message.username) {
@@ -101,19 +106,92 @@ onSnapshot(collection(db, 'messages'), (snapshot) => {
     }
     if (change.type === 'modified') {
       console.log('modified', change.doc.data());
+      updateMessage(change.doc);
     }
     if (change.type === 'removed') {
       console.log('removed', change.doc.data());
+      deleteMessage(change.doc.id);
     }
   });
 });
 
 async function removeMessage(id) {
-  const message = document.querySelector(`[data-id="${id}"]`);
-  message.remove();
+  try {
+    await deleteDoc(doc(db, 'messages', id));
+    console.log('Document deleted with ID: ', id);
+  } catch (error) {
+    console.error('Error removing document: ', error);
+  }
+}
+
+async function updateMessage(doc) {
+  const message = doc.data();
+  const id = doc.id;
+  const messageHTML = `
+    <div class="message" data-id="${id}">
+      <i class="fas fa-user"></i>
+      <div>
+        <span class="username">
+          ${message.username}
+          <time>${new Date(message.createdAt.toDate()).toLocaleString('hu-HU')}</time>
+        </span>
+        <br />
+        <span class="message-text">${message.message}</span>
+      </div>
+      <div class="message-edit-buttons">
+        <i class="fas fa-trash-alt"></i>
+        <i class="fas fa-pen"></i>
+      </div>
+    </div>
+  `;
+  const messageElement = document.querySelector(`[data-id="${id}"]`);
+  messageElement.outerHTML = messageHTML;
+  const deleteButton = document.querySelector(`[data-id="${id}"] .fa-trash-alt`);
+  deleteButton.addEventListener('click', () => {
+    removeMessage(id);
+    deleteMessage(id);
+  });
+  const editButton = document.querySelector(`[data-id="${id}"] .fa-pen`);
+  editButton.addEventListener('click', () => {
+    displayEditMessage(id);
+  });
 }
 
 async function deleteMessage(id) {
-  await deleteDoc(doc(db, 'messages', id));
-  console.log(`Document with ID ${id} deleted`);
+  try {
+    await deleteDoc(doc(db, 'messages', id));
+    console.log('Document deleted with ID: ', id);
+  } catch (error) {
+    console.error('Error removing document: ', error);
+  }
+}
+
+async function editMessage(id, message) {
+  try {
+    const messageWithTimestamp = { ...message, updatedAt: serverTimestamp() };
+    await updateDoc(doc(db, 'messages', id), messageWithTimestamp);
+    console.log('Document updated with ID: ', id);
+  } catch (error) {
+    console.error('Error updating document: ', error);
+  }
+}
+
+function displayEditMessage(id) {
+  const messageElement = document.querySelector(`[data-id="${id}"]`);
+  const messageTextElement = messageElement.querySelector('.message-text');
+  const messageText = messageTextElement.innerText;
+  const editFormHTML = `
+    <div class="edit-form">
+      <textarea id="edit-message">${messageText}</textarea>
+      <button id="edit-send">Update</button>
+    </div>
+  `;
+  messageElement.innerHTML = editFormHTML;
+  const editSendButton = messageElement.querySelector('#edit-send');
+  editSendButton.addEventListener('click', () => {
+    const newMessage = document.querySelector('#edit-message').value;
+    if (newMessage) {
+      editMessage(id, { message: newMessage });
+    }
+  });
 }
